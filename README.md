@@ -3,7 +3,7 @@ Raft implementation library for Java.
 Inspired by the [Raft paper](https://github.com/maemual/raft-zh_cn) and Raft author's open-source implementation [LogCabin](https://github.com/logcabin/logcabin).
 
 
-# 支持的功能
+# Supported Features
 - Leader election
 - Log replication
 - Snapshots
@@ -17,18 +17,20 @@ It also creates a client directory for testing the read/write functionality of t
 After successful deployment, to test the write operation, run the following script:
 
 
-# 使用方法
-下面介绍如何在代码中使用raft-java依赖库来实现一套分布式存储系统。
-## 配置依赖（暂未发布到maven中央仓库，需要手动install到本地）
-```
+## How to Use
+Here's how to use the raft-java dependency library to implement a distributed storage system.
+
+## Configuring Dependencies (not yet released to the Maven Central Repository, needs to be manually installed locally)
+```xml
 <dependency>
     <groupId>com.github.raftimpl.raft</groupId>
     <artifactId>raft-java-core</artifactId>
     <version>1.9.0</version>
 </dependency>
-```
 
-## 定义数据写入和读取接口
+
+## Defining Data Writing and Reading Interfaces
+
 ```protobuf
 message SetRequest {
     string key = 1;
@@ -51,69 +53,79 @@ public interface ExampleService {
 }
 ```
 
-## 服务端使用方法
-1. 实现状态机StateMachine接口实现类
+## Server-Side Usage
+1. Implement the StateMachine interface implementation class
 ```java
-// 该接口三个方法主要是给Raft内部调用
+
+// These three methods in this interface are primarily called internally by Raft
 public interface StateMachine {
     /**
-     * 对状态机中数据进行snapshot，每个节点本地定时调用
-     * @param snapshotDir snapshot数据输出目录
+     * Perform a snapshot of the data in the state machine, called locally by each node periodically
+     * @param snapshotDir snapshot data output directory
      */
     void writeSnapshot(String snapshotDir);
+
     /**
-     * 读取snapshot到状态机，节点启动时调用
-     * @param snapshotDir snapshot数据目录
+     * Read snapshot into the state machine, called when the node starts
+     * @param snapshotDir snapshot data directory
      */
     void readSnapshot(String snapshotDir);
+
     /**
-     * 将数据应用到状态机
-     * @param dataBytes 数据二进制
+     * Apply data to the state machine
+     * @param dataBytes binary data
      */
     void apply(byte[] dataBytes);
 }
+
 ```
 
-2. 实现数据写入和读取接口
+2. Implement the data writing and reading interfaces
 ```
-// ExampleService实现类中需要包含以下成员
+// The ExampleService implementation class should include the following members
 private RaftNode raftNode;
 private ExampleStateMachine stateMachine;
-```
-```
-// 数据写入主要逻辑
+
+// Main logic for data writing
 byte[] data = request.toByteArray();
-// 数据同步写入raft集群
+// Synchronously write data into the Raft cluster
 boolean success = raftNode.replicate(data, Raft.EntryType.ENTRY_TYPE_DATA);
 Example.SetResponse response = Example.SetResponse.newBuilder().setSuccess(success).build();
-```
-```
-// 数据读取主要逻辑，由具体应用状态机实现
+
+// Main logic for data reading, implemented by the specific application state machine
 Example.GetResponse response = stateMachine.get(request);
+
 ```
 
-3. 服务端启动逻辑
+3. Server startup logic
 ```
-// 初始化RPCServer
+/// Initialize the RPCServer
 RPCServer server = new RPCServer(localServer.getEndPoint().getPort());
-// 应用状态机
+
+// Apply the state machine
 ExampleStateMachine stateMachine = new ExampleStateMachine();
-// 设置Raft选项，比如：
+
+// Set Raft options, such as:
 RaftOptions.snapshotMinLogSize = 10 * 1024;
 RaftOptions.snapshotPeriodSeconds = 30;
 RaftOptions.maxSegmentFileSize = 1024 * 1024;
-// 初始化RaftNode
+
+// Initialize the RaftNode
 RaftNode raftNode = new RaftNode(serverList, localServer, stateMachine);
-// 注册Raft节点之间相互调用的服务
+
+// Register the services for Raft nodes to call each other
 RaftConsensusService raftConsensusService = new RaftConsensusServiceImpl(raftNode);
 server.registerService(raftConsensusService);
-// 注册给Client调用的Raft服务
+
+// Register the Raft services for clients to call
 RaftClientService raftClientService = new RaftClientServiceImpl(raftNode);
 server.registerService(raftClientService);
-// 注册应用自己提供的服务
+
+// Register the services provided by the application itself
 ExampleService exampleService = new ExampleServiceImpl(raftNode, stateMachine);
 server.registerService(exampleService);
-// 启动RPCServer，初始化Raft节点
+
+// Start the RPCServer, initialize the Raft nodes
 server.start();
 raftNode.init();
 ```
